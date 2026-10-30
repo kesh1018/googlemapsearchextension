@@ -217,6 +217,77 @@
     return { query, href: placeLink ? placeLink.href : mapsUrl(query) };
   }
 
+  // Without a knowledge panel the results page gives no hint that a search is
+  // about a place, so ask Google Maps: the search counts as a place when Maps
+  // finds a place whose name and address contain the search words.
+  const FILLER_WORDS = new Set(["near", "me", "in", "at", "the", "a", "an", "of", "and", "best", "top", "open", "now", "nearby", "around", "closest", "nearest"]);
+  const placeLookups = new Map(); // query -> "pending" | true | false
+
+  function words(text) {
+    return text
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/\p{M}/gu, "") // accents: "café" matches "cafe"
+      .replace(/['’]/g, "") // "mcdonalds" matches "McDonald's"
+      .split(/[^\p{L}\p{N}]+/u)
+      .filter(Boolean);
+  }
+
+  // Place entries in a Maps search reply have the name at [11], coordinates
+  // [null, null, lat, lng] at [9] and the address at [39].
+  function collectPlaces(node, out) {
+    if (!Array.isArray(node)) return;
+    const coords = node[9];
+    if (typeof node[11] === "string" && Array.isArray(coords) && coords.length === 4 && typeof coords[2] === "number") {
+      out.push(`${node[11]} ${typeof node[39] === "string" ? node[39] : ""}`);
+    }
+    for (const child of node) collectPlaces(child, out);
+  }
+
+  function matchesPlace(query, places) {
+    const searchWords = words(query).filter((w) => w.length > 1 && !FILLER_WORDS.has(w));
+    if (!searchWords.length) return places.length > 0;
+    // Longer searches may carry one word the place doesn't ("dl chicken shack").
+    const allowedMisses = searchWords.length >= 3 ? 1 : 0;
+    return places.some((place) => {
+      const placeWords = new Set(words(place));
+      return searchWords.filter((w) => !placeWords.has(w)).length <= allowedMisses;
+    });
+  }
+
+  async function lookUpPlace(query) {
+    // The request Google Maps makes for a search, trimmed to the parameters
+    // that still return place names and addresses. Sent without cookies so it
+    // isn't tied to the signed-in account.
+    const url = new URL("/search", location.origin);
+    url.searchParams.set("tbm", "map");
+    url.searchParams.set("q", query);
+    url.searchParams.set("pb", `!1s${query.replace(/!/g, " ")}!7i20!10b1`);
+    const hl = new URLSearchParams(location.search).get("hl");
+    if (hl) url.searchParams.set("hl", hl);
+    try {
+      const response = await fetch(url, { credentials: "omit" });
+      const text = await response.text();
+      // The reply starts with an anti-JSON-hijacking line: )]}'
+      const places = [];
+      collectPlaces(JSON.parse(text.slice(text.indexOf("\n") + 1)), places);
+      return matchesPlace(query, places);
+    } catch {
+      return false;
+    }
+  }
+
+  function isPlaceSearch(query) {
+    if (!placeLookups.has(query)) {
+      placeLookups.set(query, "pending");
+      lookUpPlace(query).then((isPlace) => {
+        placeLookups.set(query, isPlace);
+        scheduleUpdate();
+      });
+    }
+    return placeLookups.get(query) === true;
+  }
+
   function buildPanel() {
     const panel = document.createElement("div");
     panel.id = PANEL_ID;
@@ -262,7 +333,7 @@
     let place = null;
     if (results && !pageHasMap && isAllResults(new URL(location.href))) {
       if (rhs) place = placeFromKnowledgePanel(rhs);
-      else if (getQuery()) place = { query: getQuery(), href: mapsUrl() };
+      else if (getQuery() && isPlaceSearch(getQuery())) place = { query: getQuery(), href: mapsUrl() };
     }
 
     if (!place) {
