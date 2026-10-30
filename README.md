@@ -28,10 +28,6 @@ The manifest carries a fixed `key`, so the extension always has the same ID (`ic
 - **Same folder** (e.g. `git pull`): click the reload icon on the extension's card in `chrome://extensions`.
 - **New download/unzip:** click **Load unpacked** and select the new folder. It takes the place of the old one; afterwards the old folder can be deleted.
 
-Check the version number on the card to confirm the update.
-
-Versions before 1.2.1 had no fixed ID. If you installed one of those, remove it once in `chrome://extensions`, then load 1.2.1 or later; from then on updates replace it.
-
 ## How it works
 
 `content.js` runs on `/search` pages of every Google domain listed at <https://www.google.com/supported_domains>.
