@@ -21,7 +21,16 @@ No background script and no data collected. The only permission is `storage`, us
 
 Works in any Chromium browser that supports Manifest V3: Chrome, Edge (`edge://extensions`), Brave (`brave://extensions`), Opera and Vivaldi. In Opera, also enable **Allow access to search page results** for the extension.
 
-To update, pull/download the latest version and click the reload icon on the extension's card in `chrome://extensions`.
+## Update
+
+The manifest carries a fixed `key`, so the extension always has the same ID (`icenfjlibihobocclccdijbolcnfplkp`) whichever folder it is loaded from. A new version therefore replaces the installed one instead of appearing as a second extension, and settings (such as a hidden map) are kept.
+
+- **Same folder** (e.g. `git pull`): click the reload icon on the extension's card in `chrome://extensions`.
+- **New download/unzip:** click **Load unpacked** and select the new folder. It takes the place of the old one; afterwards the old folder can be deleted.
+
+Check the version number on the card to confirm the update.
+
+Versions before 1.2.1 had no fixed ID. If you installed one of those, remove it once in `chrome://extensions`, then load 1.2.1 or later; from then on updates replace it.
 
 ## How it works
 
