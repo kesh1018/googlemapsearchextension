@@ -1,11 +1,13 @@
 // Google Search Maps Button
-// Restores the "Maps" tab on Google Search and makes result map previews
-// open Google Maps when clicked.
+// Restores the "Maps" tab on Google Search, makes result map previews open
+// Google Maps when clicked, and shows a map in the right-hand column.
 (() => {
   "use strict";
 
   const TAB_ATTR = "data-gsmb-tab";
   const MAP_ATTR = "data-gsmb-map";
+  const PANEL_ID = "gsmb-panel";
+  const HIDDEN_KEY = "mapPanelHidden";
   const MAP_IMG_SELECTOR = [
     'img[src*="/maps/vt"]',
     'img[src*="/maps/api/staticmap"]',
@@ -24,9 +26,18 @@
     return input ? input.value.trim() : "";
   }
 
-  function mapsUrl() {
-    const query = getQuery();
+  function mapsUrl(query = getQuery()) {
     const url = new URL(query ? `/maps/search/${encodeURIComponent(query)}` : "/maps", location.origin);
+    const hl = new URLSearchParams(location.search).get("hl");
+    if (hl) url.searchParams.set("hl", hl);
+    return url.href;
+  }
+
+  // Keyless Maps embed; www.google.com serves it for every country domain.
+  function embedUrl(query) {
+    const url = new URL("https://www.google.com/maps");
+    url.searchParams.set("q", query);
+    url.searchParams.set("output", "embed");
     const hl = new URLSearchParams(location.search).get("hl");
     if (hl) url.searchParams.set("hl", hl);
     return url.href;
@@ -39,15 +50,28 @@
 
   // ---- Maps tab -----------------------------------------------------------
 
-  function findTabTemplate() {
-    // Prefer the Images tab: it is present on almost every results page and is
-    // never the selected tab while browsing web results.
-    const links = document.querySelectorAll('[role="listitem"] > a[href*="udm=2"], [role="listitem"] > a[href*="tbm=isch"]');
-    for (const link of links) {
-      const item = link.closest('[role="listitem"]');
-      if (item && item.parentElement && item.parentElement.getAttribute("role") === "list") return item;
+  const VERTICAL_TAB = ':scope > [role="listitem"] > a[href*="udm="], :scope > [role="listitem"] > a[href*="tbm="]';
+
+  // The tab bar is the list holding both "All" and links to other verticals
+  // (Images, News, ...). Suggestion chips on the Images tab are lists too, but
+  // every chip links to an image search, so none of them counts as "All".
+  function findTabBar() {
+    for (const list of document.querySelectorAll('[role="list"]')) {
+      if (findAllItem(list) && list.querySelector(VERTICAL_TAB)) return list;
     }
     return null;
+  }
+
+  // Copy an unselected vertical tab (the selected one has no href) so the clone
+  // gets Google's normal tab styling: Images if possible, never AI Mode
+  // (udm=50), which is styled differently.
+  function findTabTemplate(list) {
+    const tabs = [...list.querySelectorAll(VERTICAL_TAB)].map((link) => {
+      const params = new URL(link.href).searchParams;
+      return { link, udm: params.get("udm"), tbm: params.get("tbm") };
+    });
+    const pick = tabs.find((t) => t.udm === "2" || t.tbm === "isch") || tabs.find((t) => t.udm !== "50");
+    return pick ? pick.link.closest('[role="listitem"]') : null;
   }
 
   function hasNativeMapsTab(list) {
@@ -91,10 +115,10 @@
       return;
     }
 
-    const template = findTabTemplate();
+    const list = findTabBar();
+    if (!list || hasNativeMapsTab(list)) return;
+    const template = findTabTemplate(list);
     if (!template) return;
-    const list = template.parentElement;
-    if (hasNativeMapsTab(list)) return;
 
     // Place it straight after "All", where Google used to show it.
     const all = findAllItem(list);
@@ -173,24 +197,114 @@
   document.addEventListener("click", handleMapClick, true);
   document.addEventListener("auxclick", handleMapClick, true);
 
+  // ---- Right-hand map panel -----------------------------------------------
+
+  let panelHidden = false;
+  // Wait for the saved hidden/shown choice so the map doesn't flash in.
+  let panelStateLoaded = false;
+
+  // A knowledge panel about a place has an address or a Maps place link; one
+  // about a person, film, etc. has neither and gets no map.
+  function placeFromKnowledgePanel(rhs) {
+    const placeLink = rhs.querySelector('a[href*="/maps/place"]');
+    const addressEl = rhs.querySelector('[data-attrid*="address"]');
+    if (!placeLink && !addressEl) return null;
+    const title = rhs.querySelector('[data-attrid="title"]');
+    const name = title ? title.textContent.trim() : getQuery();
+    // Drop the localized "Address:" label in front of the value.
+    const address = addressEl ? addressEl.textContent.trim().replace(/^[^:\d]{1,25}:\s*/, "") : "";
+    const query = [name, address].filter(Boolean).join(", ");
+    return { query, href: placeLink ? placeLink.href : mapsUrl(query) };
+  }
+
+  function buildPanel() {
+    const panel = document.createElement("div");
+    panel.id = PANEL_ID;
+    panel.innerHTML = `
+      <iframe class="gsmb-frame" title="Map" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allowfullscreen></iframe>
+      <div class="gsmb-actions">
+        <a class="gsmb-open">Open in Google Maps</a>
+        <button class="gsmb-toggle" type="button"></button>
+      </div>`;
+    panel.querySelector(".gsmb-toggle").addEventListener("click", () => {
+      panelHidden = !panelHidden;
+      chrome.storage.local.set({ [HIDDEN_KEY]: panelHidden });
+      renderPanel(panel);
+    });
+    return panel;
+  }
+
+  function renderPanel(panel) {
+    const frame = panel.querySelector(".gsmb-frame");
+    panel.classList.toggle("gsmb-hidden", panelHidden);
+    // Only touch the label when it changes: rewriting it is a DOM mutation,
+    // which would re-trigger the observer forever.
+    const toggle = panel.querySelector(".gsmb-toggle");
+    const label = panelHidden ? "Show map" : "Hide map";
+    if (toggle.textContent !== label) toggle.textContent = label;
+    panel.querySelector(".gsmb-open").href = panel.dataset.href;
+    // Only load the map while it is visible.
+    const src = panelHidden ? "" : embedUrl(panel.dataset.query);
+    if (frame.getAttribute("src") !== src) {
+      if (src) frame.src = src;
+      else frame.removeAttribute("src");
+    }
+  }
+
+  function ensureMapPanel() {
+    if (!panelStateLoaded) return;
+    let panel = document.getElementById(PANEL_ID);
+    const results = document.getElementById("center_col");
+    const rhs = document.getElementById("rhs");
+    // Google already shows (and we made clickable) a map; don't add a second.
+    const pageHasMap = document.querySelector(`[${MAP_ATTR}]`);
+
+    let place = null;
+    if (results && !pageHasMap && isAllResults(new URL(location.href))) {
+      if (rhs) place = placeFromKnowledgePanel(rhs);
+      else if (getQuery()) place = { query: getQuery(), href: mapsUrl() };
+    }
+
+    if (!place) {
+      if (panel) panel.remove();
+      return;
+    }
+
+    if (!panel) panel = buildPanel();
+    const standalone = !rhs;
+    if (standalone && panel.previousElementSibling !== results) results.after(panel);
+    else if (!standalone && panel !== rhs.firstElementChild) rhs.prepend(panel);
+    panel.classList.toggle("gsmb-standalone", standalone);
+
+    panel.dataset.query = place.query;
+    panel.dataset.href = place.href;
+    renderPanel(panel);
+  }
+
   // ---- Wiring --------------------------------------------------------------
 
   function update() {
     ensureMapsTab();
     markMapPreviews();
+    ensureMapPanel();
   }
 
   let scheduled = false;
   function scheduleUpdate() {
     if (scheduled) return;
     scheduled = true;
-    requestAnimationFrame(() => {
+    setTimeout(() => {
       scheduled = false;
       update();
-    });
+    }, 50);
   }
 
   update();
+  chrome.storage.local.get(HIDDEN_KEY).then((stored) => {
+    panelHidden = Boolean(stored[HIDDEN_KEY]);
+    panelStateLoaded = true;
+    scheduleUpdate();
+  });
   new MutationObserver(scheduleUpdate).observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener("popstate", scheduleUpdate);
   window.addEventListener("load", scheduleUpdate);
