@@ -8,10 +8,6 @@ A small Chrome extension that brings back what Google removed from Search in the
   - for a place with a Google info panel (address shown), the map sits at the top of that panel, pinned to the place;
   - otherwise the extension asks Google Maps whether the search finds a place whose name and address contain the search words (e.g. "downlow chicken" → DownLow Chicken Shack), and shows the map in the empty right column only if it does.
 
-  Searches that aren't about places ("python sort list", "how to boil eggs", people, films, …) get no map, and neither do non-"All" tabs or pages where Google already shows a map. **Hide map** / **Show map** under the panel toggles it, and the choice is remembered.
-
-No background script and no data collected. The only permission is `storage`, used to remember whether the map panel is hidden.
-
 ## Install
 
 1. Download this repository (green **Code** button → **Download ZIP**, then unzip) or `git clone` it.
