@@ -214,7 +214,15 @@
     // Drop the localized "Address:" label in front of the value.
     const address = addressEl ? addressEl.textContent.trim().replace(/^[^:\d]{1,25}:\s*/, "") : "";
     const query = [name, address].filter(Boolean).join(", ");
-    return { query, href: placeLink ? placeLink.href : mapsUrl(query) };
+    return { query, href: isGoogleMapsUrl(placeLink) ? placeLink.href : mapsUrl(query) };
+  }
+
+  // Only reuse a link taken from the page if it is a Maps URL on this same
+  // Google site, never e.g. a javascript: URL or another host.
+  function isGoogleMapsUrl(link) {
+    if (!link) return false;
+    const url = new URL(link.href);
+    return url.origin === location.origin && url.pathname.startsWith("/maps/");
   }
 
   // Without a knowledge panel the results page gives no hint that a search is

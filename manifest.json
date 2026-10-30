@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Google Search Maps Button",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Adds the Maps tab back to Google Search, makes result map previews open Google Maps, and shows a map beside the results.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvpn2nRDIHj0VlQLGSkdD+wNjUawHHZW6DO2siHjE/yULhDKcr4n+tZ3h5Yyzg2oNp7KxrZf9lN3edeX0MrUUxrfuet+wJDAQeCOfPL76hQaAixod60p66VNh0A4s5H7hvuRDB9qq2CyYx4753I3eWxPGTjP4G/1eiek/vp3bF4UcdJDwRnsRkp0RmeJ49JJCRtL8dkJizAe0buUU/USX75+FjbCTC2NFoUAwIV3pZxFQxJSIZgDBesF+GoeywILuD9JQl4KHlB4zCrs8gsTEcpstAio7KxFkv7yAjujwVUL7bgjNewJVRAXyI40k2fL93d1a4v9ya/m2D324lhzcMwIDAQAB",
   "icons": {
